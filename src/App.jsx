@@ -37,58 +37,75 @@ function VolumeBar({ level }) {
 }
 
 export default function App() {
-  const [devices, setDevices] = useState({ inputs: [], outputs: [] })
-  const [selectedMic, setSelectedMic] = useState('')
-  const [selectedSpeaker, setSelectedSpeaker] = useState('')
-  const [isActive, setIsActive] = useState(false)
-  const [volume, setVolume] = useState(1)
-  const [error, setError] = useState(null)
-  const [level, setLevel] = useState(0)
-  const [permissionGranted, setPermissionGranted] = useState(false)
+   const [devices, setDevices] = useState({ inputs: [], outputs: [] })
+   const [selectedMic, setSelectedMic] = useState('')
+   const [selectedSpeaker, setSelectedSpeaker] = useState('')
+   const [isActive, setIsActive] = useState(false)
+   const [volume, setVolume] = useState(1)
+   const [error, setError] = useState(null)
+   const [level, setLevel] = useState(0)
+   const [permissionGranted, setPermissionGranted] = useState(false)
+   const [isIOS, setIsIOS] = useState(false)
+   const [isAndroid, setIsAndroid] = useState(false)
 
-  const streamRef = useRef(null)
-  const audioElRef = useRef(null)
-  const analyserRef = useRef(null)
-  const animFrameRef = useRef(null)
-  const audioCtxRef = useRef(null)
+   const streamRef = useRef(null)
+   const audioElRef = useRef(null)
+   const analyserRef = useRef(null)
+   const animFrameRef = useRef(null)
+   const audioCtxRef = useRef(null)
 
-  const loadDevices = useCallback(async () => {
-    try {
-      const allDevices = await navigator.mediaDevices.enumerateDevices()
-      const inputs = allDevices.filter(d => d.kind === 'audioinput')
-      const outputs = allDevices.filter(d => d.kind === 'audiooutput')
-      setDevices({ inputs, outputs })
-      if (inputs.length > 0 && !selectedMic) setSelectedMic(inputs[0].deviceId)
-      if (outputs.length > 0 && !selectedSpeaker) setSelectedSpeaker(outputs[0].deviceId)
-    } catch (err) {
-      setError('No se pudo obtener la lista de dispositivos: ' + err.message)
-    }
-  }, [selectedMic, selectedSpeaker])
+   const loadDevices = useCallback(async () => {
+     try {
+       const allDevices = await navigator.mediaDevices.enumerateDevices()
+       const inputs = allDevices.filter(d => d.kind === 'audioinput')
+       const outputs = allDevices.filter(d => d.kind === 'audiooutput')
+       setDevices({ inputs, outputs })
+       if (inputs.length > 0 && !selectedMic) setSelectedMic(inputs[0].deviceId)
+       if (outputs.length > 0 && !selectedSpeaker) setSelectedSpeaker(outputs[0].deviceId)
+     } catch (err) {
+       console.error('Error enumerating devices:', err)
+       setError('No se pudo obtener la lista de dispositivos: ' + err.message)
+     }
+   }, [selectedMic, selectedSpeaker])
 
-  const requestPermission = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getTracks().forEach(t => t.stop())
-      setPermissionGranted(true)
-      setError(null)
-      await loadDevices()
-    } catch (err) {
-      setError('Permiso de micrófono denegado. Permite el acceso en tu navegador.')
-    }
-  }, [loadDevices])
+   const requestPermission = useCallback(async () => {
+     try {
+       // Request microphone permission
+       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+       stream.getTracks().forEach(t => t.stop())
 
-  useEffect(() => {
-    navigator.mediaDevices.enumerateDevices().then(devices => {
-      const hasLabels = devices.some(d => d.label)
-      if (hasLabels) {
-        setPermissionGranted(true)
-        loadDevices()
-      }
-    })
+       // For Android Chrome and better device detection, enumerate devices after permission
+       // This helps discover all available output devices
+       setPermissionGranted(true)
+       setError(null)
 
-    navigator.mediaDevices.addEventListener('devicechange', loadDevices)
-    return () => navigator.mediaDevices.removeEventListener('devicechange', loadDevices)
-  }, [loadDevices])
+       // Small delay to ensure permissions are fully processed
+       setTimeout(loadDevices, 100)
+     } catch (err) {
+       console.error('Permission error:', err)
+       setError('Permiso de micrófono denegado. Permite el acceso en tu navegador.')
+     }
+   }, [loadDevices])
+
+   useEffect(() => {
+     // Detect platform
+     const ua = navigator.userAgent.toLowerCase()
+     setIsIOS(/iphone|ipad|ipod/.test(ua))
+     setIsAndroid(/android/.test(ua))
+
+     navigator.mediaDevices.enumerateDevices().then(devices => {
+       const hasLabels = devices.some(d => d.label)
+       if (hasLabels) {
+         setPermissionGranted(true)
+         loadDevices()
+       }
+     }).catch(err => {
+       console.error('Enumeration error:', err)
+     })
+
+     navigator.mediaDevices.addEventListener('devicechange', loadDevices)
+     return () => navigator.mediaDevices.removeEventListener('devicechange', loadDevices)
+   }, [loadDevices])
 
   const startLevelMeter = useCallback((stream) => {
     const ctx = new AudioContext()
@@ -122,31 +139,38 @@ export default function App() {
     setLevel(0)
   }, [])
 
-  const start = useCallback(async () => {
-    setError(null)
-    try {
-      const constraints = {
-        audio: selectedMic ? { deviceId: { exact: selectedMic } } : true
-      }
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
-      streamRef.current = stream
+   const start = useCallback(async () => {
+     setError(null)
+     try {
+       const constraints = {
+         audio: selectedMic ? { deviceId: { exact: selectedMic } } : true
+       }
+       const stream = await navigator.mediaDevices.getUserMedia(constraints)
+       streamRef.current = stream
 
-      const audioEl = new Audio()
-      audioEl.srcObject = stream
-      audioEl.volume = volume
-      audioElRef.current = audioEl
+       const audioEl = new Audio()
+       audioEl.srcObject = stream
+       audioEl.volume = volume
+       audioElRef.current = audioEl
 
-      if (selectedSpeaker && audioEl.setSinkId) {
-        await audioEl.setSinkId(selectedSpeaker)
-      }
+       // Try to set sink ID if available and a speaker is selected
+       if (selectedSpeaker && audioEl.setSinkId) {
+         try {
+           await audioEl.setSinkId(selectedSpeaker)
+         } catch (sinkErr) {
+           console.warn('Could not set sink ID:', sinkErr)
+           // Continue anyway - audio will play on default output
+         }
+       }
 
-      await audioEl.play()
-      startLevelMeter(stream)
-      setIsActive(true)
-    } catch (err) {
-      setError('Error al iniciar: ' + err.message)
-    }
-  }, [selectedMic, selectedSpeaker, volume, startLevelMeter])
+       await audioEl.play()
+       startLevelMeter(stream)
+       setIsActive(true)
+     } catch (err) {
+       console.error('Start error:', err)
+       setError('Error al iniciar: ' + err.message)
+     }
+   }, [selectedMic, selectedSpeaker, volume, startLevelMeter])
 
   const stop = useCallback(() => {
     if (streamRef.current) {
@@ -203,69 +227,89 @@ export default function App() {
             <button className="btn btn-primary" onClick={requestPermission}>
               Permitir micrófono
             </button>
+            {error && (
+              <div className="error-box">
+                {error}
+              </div>
+            )}
           </div>
         ) : (
           <>
-            <div className="controls">
-              <div className="control-group">
-                <label>
-                  <MicIcon active={false} />
-                  Micrófono
-                </label>
-                <select
-                  value={selectedMic}
-                  onChange={e => setSelectedMic(e.target.value)}
-                  disabled={isActive}
-                >
-                  {devices.inputs.map(d => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Micrófono ${d.deviceId.slice(0, 8)}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
+             <div className="controls">
+               <div className="control-group">
+                 <label>
+                   <MicIcon active={false} />
+                   Micrófono
+                 </label>
+                 <select
+                   value={selectedMic}
+                   onChange={e => setSelectedMic(e.target.value)}
+                   disabled={isActive}
+                 >
+                   {devices.inputs.map(d => (
+                     <option key={d.deviceId} value={d.deviceId}>
+                       {d.label || `Micrófono ${d.deviceId.slice(0, 8)}`}
+                     </option>
+                   ))}
+                 </select>
+               </div>
 
-              <div className="control-group">
-                <label>
-                  <SpeakerIcon />
-                  Altavoz
-                  {!hasSinkId && <span className="badge">No soportado</span>}
-                </label>
-                <select
-                  value={selectedSpeaker}
-                  onChange={e => setSelectedSpeaker(e.target.value)}
-                  disabled={isActive || !hasSinkId}
-                >
-                  {devices.outputs.length === 0 ? (
-                    <option value="">Altavoz por defecto</option>
-                  ) : (
-                    devices.outputs.map(d => (
-                      <option key={d.deviceId} value={d.deviceId}>
-                        {d.label || `Altavoz ${d.deviceId.slice(0, 8)}`}
-                      </option>
-                    ))
+               <div className="control-group">
+                 <label>
+                   <SpeakerIcon />
+                   Altavoz
+                   {!hasSinkId && <span className="badge">No soportado</span>}
+                 </label>
+                 <select
+                   value={selectedSpeaker}
+                   onChange={e => setSelectedSpeaker(e.target.value)}
+                   disabled={isActive || !hasSinkId}
+                 >
+                   {devices.outputs.length === 0 ? (
+                     <option value="">Altavoz por defecto</option>
+                   ) : (
+                     devices.outputs.map(d => (
+                       <option key={d.deviceId} value={d.deviceId}>
+                         {d.label || `Altavoz ${d.deviceId.slice(0, 8)}`}
+                       </option>
+                     ))
+                   )}
+                 </select>
+                 {!hasSinkId && (
+                   <p className="hint">
+                     {isAndroid
+                       ? 'En Chrome/Android, verifica que hayas otorgado todos los permisos. Intenta hacer swipe hacia abajo desde la parte superior y busca notificaciones de permisos pendientes.'
+                       : isIOS
+                       ? 'iOS tiene limitaciones con Bluetooth. Intenta reconectar tu dispositivo Bluetooth y recarga la app.'
+                       : 'Tu navegador no soporta selección de altavoz. Usa Chrome o Edge.'}
+                   </p>
+                 )}
+                  {isAndroid && devices.outputs.length === 0 && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={loadDevices}
+                      style={{ marginTop: '8px', fontSize: '0.9em' }}
+                    >
+                      Buscar altavoces
+                    </button>
                   )}
-                </select>
-                {!hasSinkId && (
-                  <p className="hint">Tu navegador no soporta selección de altavoz. Usa Chrome o Edge.</p>
-                )}
-              </div>
+                </div>
 
-              <div className="control-group">
-                <label>
-                  Volumen — {Math.round(volume * 100)}%
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={volume}
-                  onChange={e => setVolume(parseFloat(e.target.value))}
-                  className="range-input"
-                />
-              </div>
-            </div>
+               <div className="control-group">
+                 <label>
+                   Volumen — {Math.round(volume * 100)}%
+                 </label>
+                 <input
+                   type="range"
+                   min="0"
+                   max="1"
+                   step="0.01"
+                   value={volume}
+                   onChange={e => setVolume(parseFloat(e.target.value))}
+                   className="range-input"
+                 />
+               </div>
+             </div>
 
             {isActive && (
               <div className="level-section">

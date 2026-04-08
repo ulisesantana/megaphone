@@ -230,9 +230,22 @@ select:disabled {
 }
 
 .btn-primary:hover {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 15px var(--accent-glow);
+   background: var(--accent-hover);
+   transform: translateY(-1px);
+   box-shadow: 0 4px 15px var(--accent-glow);
+ }
+
+.btn-secondary {
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  width: auto;
+  padding: 0.6rem 1rem;
+}
+
+.btn-secondary:hover {
+  background: var(--border);
+  border-color: var(--accent);
 }
 
 .btn-danger {
