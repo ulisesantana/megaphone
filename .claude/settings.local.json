@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(npm --version)",
+      "Read(//Users/ulisesantana/.nvm/alias/**)",
+      "Bash(command -v node18)",
+      "Bash(command -v fnm)",
+      "Bash(fnm list:*)"
+    ]
+  }
+}
