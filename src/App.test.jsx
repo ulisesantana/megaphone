@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
+
+async function renderApp() {
+  let result
+  await act(async () => {
+    result = render(<App />)
+  })
+  return result
+}
 
 describe('App Component', () => {
   let mockStream, mockAudioElement, mockAnalyser, mockAudioContext
@@ -44,33 +52,33 @@ describe('App Component', () => {
 
   // --- Rendering ---
 
-  it('renders the title', () => {
-    render(<App />)
+  it('renders the title', async () => {
+    await renderApp()
     expect(screen.getByText('Megaphone')).toBeInTheDocument()
   })
 
-  it('renders the subtitle', () => {
-    render(<App />)
+  it('renders the subtitle', async () => {
+    await renderApp()
     expect(screen.getByText('Audio en tiempo real')).toBeInTheDocument()
   })
 
-  it('renders the card container', () => {
-    render(<App />)
+  it('renders the card container', async () => {
+    await renderApp()
     expect(document.querySelector('.card')).toBeInTheDocument()
   })
 
-  it('renders the app wrapper', () => {
-    render(<App />)
+  it('renders the app wrapper', async () => {
+    await renderApp()
     expect(document.querySelector('.app')).toBeInTheDocument()
   })
 
-  it('renders SVG icons', () => {
-    render(<App />)
+  it('renders SVG icons', async () => {
+    await renderApp()
     expect(document.querySelectorAll('svg').length).toBeGreaterThan(0)
   })
 
-  it('renders the mic icon wrapper', () => {
-    render(<App />)
+  it('renders the mic icon wrapper', async () => {
+    await renderApp()
     expect(document.querySelector('.mic-icon-wrapper')).toBeInTheDocument()
   })
 
@@ -78,7 +86,7 @@ describe('App Component', () => {
 
   it('shows permission section when no devices available', async () => {
     global.mockEnumerateDevices.mockResolvedValueOnce([])
-    render(<App />)
+    await renderApp()
     await waitFor(() => {
       expect(screen.getByText(/Necesitamos acceso al micrófono/i)).toBeInTheDocument()
     })
@@ -86,7 +94,7 @@ describe('App Component', () => {
 
   it('shows the allow-mic button', async () => {
     global.mockEnumerateDevices.mockResolvedValueOnce([])
-    render(<App />)
+    await renderApp()
     await waitFor(() => {
       expect(screen.getByText(/Permitir micrófono/i)).toBeInTheDocument()
     })
@@ -95,7 +103,7 @@ describe('App Component', () => {
   it('calls getUserMedia when allow button clicked', async () => {
     global.mockEnumerateDevices.mockResolvedValueOnce([])
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await waitFor(() => screen.getByText(/Permitir micrófono/i))
     await user.click(screen.getByText(/Permitir micrófono/i))
     expect(global.mockGetUserMedia).toHaveBeenCalledWith({ audio: true })
@@ -105,7 +113,7 @@ describe('App Component', () => {
     global.mockGetUserMedia.mockRejectedValueOnce(new Error('NotAllowedError'))
     global.mockEnumerateDevices.mockResolvedValueOnce([])
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await waitFor(() => screen.getByText(/Permitir micrófono/i))
     await user.click(screen.getByText(/Permitir micrófono/i))
     await waitFor(() => {
@@ -212,13 +220,13 @@ describe('App Component', () => {
   })
 
 
-  it('adds devicechange listener on mount', () => {
-    render(<App />)
+  it('adds devicechange listener on mount', async () => {
+    await renderApp()
     expect(global.mockAddEventListener).toHaveBeenCalledWith('devicechange', expect.any(Function))
   })
 
-  it('removes devicechange listener on unmount', () => {
-    const { unmount } = render(<App />)
+  it('removes devicechange listener on unmount', async () => {
+    const { unmount } = await renderApp()
     unmount()
     expect(global.mockRemoveEventListener).toHaveBeenCalledWith('devicechange', expect.any(Function))
   })

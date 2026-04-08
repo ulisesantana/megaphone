@@ -1,9 +1,10 @@
 import '@testing-library/jest-dom'
-import { expect, afterEach, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { afterEach, vi } from 'vitest'
+import { cleanup, act } from '@testing-library/react'
 
-// Cleanup after each test
-afterEach(() => {
+// Flush all pending React state updates and cleanup after each test
+afterEach(async () => {
+  await act(async () => {})
   cleanup()
 })
 
